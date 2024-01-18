@@ -9,7 +9,6 @@ frappe.ui.form.on('Asset', {
 		frm.set_query("item_code", function() {
 			return {
 				"filters": {
-					"disabled": 0,
 					"is_fixed_asset": 1,
 					"is_stock_item": 0
 				}
@@ -284,7 +283,7 @@ frappe.ui.form.on('Asset', {
 
 
 	item_code: function(frm) {
-		if(frm.doc.item_code && frm.doc.calculate_depreciation) {
+		if(frm.doc.item_code && frm.doc.calculate_depreciation && frm.doc.gross_purchase_amount) {
 			frm.trigger('set_finance_book');
 		} else {
 			frm.set_value('finance_books', []);
@@ -323,13 +322,16 @@ frappe.ui.form.on('Asset', {
 	},
 
 	make_schedules_editable: function(frm) {
-		if (frm.doc.finance_books) {
-			var is_editable = frm.doc.finance_books.filter(d => d.depreciation_method == "Manual").length > 0
+		if (frm.doc.finance_books.length) {
+			var is_manual_hence_editable = frm.doc.finance_books.filter(d => d.depreciation_method == "Manual").length > 0
+				? true : false;
+			var is_shift_hence_editable = frm.doc.finance_books.filter(d => d.shift_based).length > 0
 				? true : false;
 
-			frm.toggle_enable("schedules", is_editable);
-			frm.fields_dict["schedules"].grid.toggle_enable("schedule_date", is_editable);
-			frm.fields_dict["schedules"].grid.toggle_enable("depreciation_amount", is_editable);
+			frm.toggle_enable("schedules", is_manual_hence_editable || is_shift_hence_editable);
+			frm.fields_dict["schedules"].grid.toggle_enable("schedule_date", is_manual_hence_editable);
+			frm.fields_dict["schedules"].grid.toggle_enable("depreciation_amount", is_manual_hence_editable);
+			frm.fields_dict["schedules"].grid.toggle_enable("shift", is_shift_hence_editable);
 		}
 	},
 
@@ -448,7 +450,7 @@ frappe.ui.form.on('Asset', {
 
 	calculate_depreciation: function(frm) {
 		frm.toggle_reqd("finance_books", frm.doc.calculate_depreciation);
-		if (frm.doc.item_code && frm.doc.calculate_depreciation ) {
+		if (frm.doc.item_code && frm.doc.calculate_depreciation && frm.doc.gross_purchase_amount) {
 			frm.trigger("set_finance_book");
 		} else {
 			frm.set_value("finance_books", []);
@@ -517,10 +519,16 @@ frappe.ui.form.on('Asset', {
 				indicator: 'red'
 			});
 		}
-		frm.set_value('gross_purchase_amount', item.base_net_rate + item.item_tax_amount);
-		frm.set_value('purchase_receipt_amount', item.base_net_rate + item.item_tax_amount);
-		item.asset_location && frm.set_value('location', item.asset_location);
+		var is_grouped_asset = frappe.db.get_value('Item', item.item_code, 'is_grouped_asset');
+		var asset_quantity = is_grouped_asset ? item.qty : 1;
+		var purchase_amount = flt(item.valuation_rate * asset_quantity, precision('gross_purchase_amount'));
+
+		frm.set_value('gross_purchase_amount', purchase_amount);
+		frm.set_value('purchase_receipt_amount', purchase_amount);
+		frm.set_value('asset_quantity', asset_quantity);
 		frm.set_value('cost_center', item.cost_center || purchase_doc.cost_center);
+		if(item.asset_location) { frm.set_value('location', item.asset_location); }
+
 	},
 
 	set_depreciation_rate: function(frm, row) {

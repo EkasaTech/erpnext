@@ -490,6 +490,12 @@ class ProductionPlan(Document):
 				bin = frappe.get_doc("Bin", bin_name, for_update=True)
 				bin.update_reserved_qty_for_production_plan()
 
+		for d in self.sub_assembly_items:
+			if d.fg_warehouse and d.type_of_manufacturing == "In House":
+				bin_name = get_or_make_bin(d.production_item, d.fg_warehouse)
+				bin = frappe.get_doc("Bin", bin_name, for_update=True)
+				bin.update_reserved_qty_for_for_sub_assembly()
+
 	def delete_draft_work_order(self):
 		for d in frappe.get_all(
 			"Work Order", fields=["name"], filters={"docstatus": 0, "production_plan": ("=", self.name)}
@@ -497,11 +503,12 @@ class ProductionPlan(Document):
 			frappe.delete_doc("Work Order", d.name)
 
 	@frappe.whitelist()
-	def set_status(self, close=None):
+	def set_status(self, close=None, update_bin=False):
 		self.status = {0: "Draft", 1: "Submitted", 2: "Cancelled"}.get(self.docstatus)
 
 		if close:
 			self.db_set("status", "Closed")
+			self.update_bin_qty()
 			return
 
 		if self.total_produced_qty > 0:
@@ -515,6 +522,9 @@ class ProductionPlan(Document):
 
 		if close is not None:
 			self.db_set("status", self.status)
+
+		if update_bin and self.docstatus == 1 and self.status != "Completed":
+			self.update_bin_qty()
 
 	def update_ordered_status(self):
 		update_status = False
@@ -560,6 +570,10 @@ class ProductionPlan(Document):
 				"project": self.project,
 			}
 
+			key = (d.item_code, d.sales_order, d.warehouse)
+			if not d.sales_order:
+				key = (d.name, d.item_code, d.warehouse)
+
 			if not item_details["project"] and d.sales_order:
 				item_details["project"] = frappe.get_cached_value("Sales Order", d.sales_order, "project")
 
@@ -568,12 +582,9 @@ class ProductionPlan(Document):
 				item_dict[(d.item_code, d.material_request_item, d.warehouse)] = item_details
 			else:
 				item_details.update(
-					{
-						"qty": flt(item_dict.get((d.item_code, d.sales_order, d.warehouse), {}).get("qty"))
-						+ (flt(d.planned_qty) - flt(d.ordered_qty))
-					}
+					{"qty": flt(item_dict.get(key, {}).get("qty")) + (flt(d.planned_qty) - flt(d.ordered_qty))}
 				)
-				item_dict[(d.item_code, d.sales_order, d.warehouse)] = item_details
+				item_dict[key] = item_details
 
 		return item_dict
 
@@ -808,7 +819,11 @@ class ProductionPlan(Document):
 
 			bom_data = []
 
-			warehouse = row.warehouse if self.skip_available_sub_assembly_item else None
+			warehouse = (
+				(self.sub_assembly_warehouse or row.warehouse)
+				if self.skip_available_sub_assembly_item
+				else None
+			)
 			get_sub_assembly_items(row.bom_no, bom_data, row.planned_qty, self.company, warehouse=warehouse)
 			self.set_sub_assembly_items_based_on_level(row, bom_data, manufacturing_type)
 			sub_assembly_items_store.extend(bom_data)
@@ -816,8 +831,6 @@ class ProductionPlan(Document):
 		if self.combine_sub_items:
 			# Combine subassembly items
 			sub_assembly_items_store = self.combine_subassembly_items(sub_assembly_items_store)
-
-		sub_assembly_items_store.sort(key=lambda d: d.bom_level, reverse=True)  # sort by bom level
 
 		for idx, row in enumerate(sub_assembly_items_store):
 			row.idx = idx + 1
@@ -830,7 +843,7 @@ class ProductionPlan(Document):
 		for data in bom_data:
 			data.qty = data.stock_qty
 			data.production_plan_item = row.name
-			data.fg_warehouse = row.warehouse
+			data.fg_warehouse = self.sub_assembly_warehouse or row.warehouse
 			data.schedule_date = row.planned_start_date
 			data.type_of_manufacturing = manufacturing_type or (
 				"Subcontract" if data.is_sub_contracted_item else "In House"
@@ -1123,7 +1136,14 @@ def get_subitems(
 
 
 def get_material_request_items(
-	row, sales_order, company, ignore_existing_ordered_qty, include_safety_stock, warehouse, bin_dict
+	doc,
+	row,
+	sales_order,
+	company,
+	ignore_existing_ordered_qty,
+	include_safety_stock,
+	warehouse,
+	bin_dict,
 ):
 	total_qty = row["qty"]
 
@@ -1132,8 +1152,14 @@ def get_material_request_items(
 		required_qty = total_qty
 	elif total_qty > bin_dict.get("projected_qty", 0):
 		required_qty = total_qty - bin_dict.get("projected_qty", 0)
-	if required_qty > 0 and required_qty < row["min_order_qty"]:
+
+	if (
+		doc.get("consider_minimum_order_qty")
+		and required_qty > 0
+		and required_qty < row["min_order_qty"]
+	):
 		required_qty = row["min_order_qty"]
+
 	item_group_defaults = get_item_group_defaults(row.item_code, company)
 
 	if not row["purchase_uom"]:
@@ -1471,6 +1497,7 @@ def get_items_for_material_requests(doc, warehouses=None, get_parent_warehouse_d
 
 			if details.qty > 0:
 				items = get_material_request_items(
+					doc,
 					details,
 					sales_order,
 					company,
@@ -1513,18 +1540,22 @@ def get_materials_from_other_locations(item, warehouses, new_mr_items, company):
 	)
 
 	locations = get_available_item_locations(
-		item.get("item_code"), warehouses, item.get("quantity"), company, ignore_validation=True
+		item.get("item_code"),
+		warehouses,
+		item.get("quantity") * item.get("conversion_factor"),
+		company,
+		ignore_validation=True,
 	)
 
 	required_qty = item.get("quantity")
+	if item.get("conversion_factor") and item.get("purchase_uom") != item.get("stock_uom"):
+		# Convert qty to stock UOM
+		required_qty = required_qty * item.get("conversion_factor")
+
 	# get available material by transferring to production warehouse
 	for d in locations:
 		if required_qty <= 0:
 			return
-
-		conversion_factor = 1.0
-		if purchase_uom != stock_uom and purchase_uom == item["uom"]:
-			conversion_factor = get_uom_conversion_factor(item["item_code"], item["uom"])
 
 		new_dict = copy.deepcopy(item)
 		quantity = required_qty if d.get("qty") > required_qty else d.get("qty")
@@ -1535,10 +1566,11 @@ def get_materials_from_other_locations(item, warehouses, new_mr_items, company):
 				"material_request_type": "Material Transfer",
 				"uom": new_dict.get("stock_uom"),  # internal transfer should be in stock UOM
 				"from_warehouse": d.get("warehouse"),
+				"conversion_factor": 1.0,
 			}
 		)
 
-		required_qty -= quantity / conversion_factor
+		required_qty -= quantity
 		new_mr_items.append(new_dict)
 
 	# raise purchase request for remaining qty
@@ -1550,7 +1582,7 @@ def get_materials_from_other_locations(item, warehouses, new_mr_items, company):
 		if frappe.db.get_value("UOM", purchase_uom, "must_be_whole_number"):
 			required_qty = ceil(required_qty)
 
-		item["quantity"] = required_qty
+		item["quantity"] = required_qty / item.get("conversion_factor")
 
 		new_mr_items.append(item)
 
@@ -1636,8 +1668,8 @@ def get_reserved_qty_for_production_plan(item_code, warehouse):
 
 	query = query.run()
 
-	if not query:
-		return 0.0
+	if not query or query[0][0] is None:
+		return None
 
 	reserved_qty_for_production_plan = flt(query[0][0])
 
@@ -1734,7 +1766,10 @@ def get_raw_materials_of_sub_assembly_items(
 			if not item.conversion_factor and item.purchase_uom:
 				item.conversion_factor = get_uom_conversion_factor(item.item_code, item.purchase_uom)
 
-			item_details.setdefault(item.get("item_code"), item)
+			if details := item_details.get(item.get("item_code")):
+				details.qty += item.get("qty")
+			else:
+				item_details.setdefault(item.get("item_code"), item)
 
 	return item_details
 
@@ -1776,3 +1811,29 @@ def sales_order_query(
 		query = query.offset(start)
 
 	return query.run()
+
+
+def get_reserved_qty_for_sub_assembly(item_code, warehouse):
+	table = frappe.qb.DocType("Production Plan")
+	child = frappe.qb.DocType("Production Plan Sub Assembly Item")
+
+	query = (
+		frappe.qb.from_(table)
+		.inner_join(child)
+		.on(table.name == child.parent)
+		.select(Sum(child.qty - IfNull(child.wo_produced_qty, 0)))
+		.where(
+			(table.docstatus == 1)
+			& (child.production_item == item_code)
+			& (child.fg_warehouse == warehouse)
+			& (table.status.notin(["Completed", "Closed"]))
+		)
+	)
+
+	query = query.run()
+
+	if not query or query[0][0] is None:
+		return None
+
+	qty = flt(query[0][0])
+	return qty if qty > 0 else 0.0

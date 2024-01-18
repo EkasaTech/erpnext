@@ -288,15 +288,16 @@ def _make_sales_order(source_name, target_doc=None, ignore_permissions=False):
 			)
 
 		# sales team
-		for d in customer.get("sales_team") or []:
-			target.append(
-				"sales_team",
-				{
-					"sales_person": d.sales_person,
-					"allocated_percentage": d.allocated_percentage or None,
-					"commission_rate": d.commission_rate,
-				},
-			)
+		if not target.get("sales_team"):
+			for d in customer.get("sales_team") or []:
+				target.append(
+					"sales_team",
+					{
+						"sales_person": d.sales_person,
+						"allocated_percentage": d.allocated_percentage or None,
+						"commission_rate": d.commission_rate,
+					},
+				)
 
 		target.flags.ignore_permissions = ignore_permissions
 		target.delivery_date = nowdate()
@@ -351,9 +352,6 @@ def _make_sales_order(source_name, target_doc=None, ignore_permissions=False):
 		set_missing_values,
 		ignore_permissions=ignore_permissions,
 	)
-
-	# postprocess: fetch shipping address, set missing values
-	doclist.set_onload("ignore_price_list", True)
 
 	return doclist
 
@@ -422,8 +420,6 @@ def _make_sales_invoice(source_name, target_doc=None, ignore_permissions=False):
 		set_missing_values,
 		ignore_permissions=ignore_permissions,
 	)
-
-	doclist.set_onload("ignore_price_list", True)
 
 	return doclist
 

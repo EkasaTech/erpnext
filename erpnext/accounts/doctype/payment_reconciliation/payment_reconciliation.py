@@ -29,6 +29,58 @@ class PaymentReconciliation(Document):
 		self.accounting_dimension_filter_conditions = []
 		self.ple_posting_date_filter = []
 
+	def load_from_db(self):
+		# 'modified' attribute is required for `run_doc_method` to work properly.
+		doc_dict = frappe._dict(
+			{
+				"modified": None,
+				"company": None,
+				"party": None,
+				"party_type": None,
+				"receivable_payable_account": None,
+				"default_advance_account": None,
+				"from_invoice_date": None,
+				"to_invoice_date": None,
+				"invoice_limit": 50,
+				"from_payment_date": None,
+				"to_payment_date": None,
+				"payment_limit": 50,
+				"minimum_invoice_amount": None,
+				"minimum_payment_amount": None,
+				"maximum_invoice_amount": None,
+				"maximum_payment_amount": None,
+				"bank_cash_account": None,
+				"cost_center": None,
+				"payment_name": None,
+				"invoice_name": None,
+			}
+		)
+		super(Document, self).__init__(doc_dict)
+
+	def save(self):
+		return
+
+	@staticmethod
+	def get_list(args):
+		pass
+
+	@staticmethod
+	def get_count(args):
+		pass
+
+	@staticmethod
+	def get_stats(args):
+		pass
+
+	def db_insert(self, *args, **kwargs):
+		pass
+
+	def db_update(self, *args, **kwargs):
+		pass
+
+	def delete(self):
+		pass
+
 	@frappe.whitelist()
 	def get_unreconciled_entries(self):
 		self.get_nonreconciled_payment_entries()
@@ -59,8 +111,6 @@ class PaymentReconciliation(Document):
 	def get_payment_entries(self):
 		order_doctype = "Sales Order" if self.party_type == "Customer" else "Purchase Order"
 		condition = self.get_conditions(get_payments=True)
-		if self.payment_name:
-			condition += "name like '%%{0}%%'".format(self.payment_name)
 
 		payment_entries = get_advance_payment_entries_for_regional(
 			self.party_type,
@@ -70,6 +120,7 @@ class PaymentReconciliation(Document):
 			against_all_orders=True,
 			limit=self.payment_limit,
 			condition=condition,
+			payment_name=self.payment_name,
 		)
 
 		return payment_entries
@@ -92,6 +143,8 @@ class PaymentReconciliation(Document):
 		bank_account_condition = (
 			"t2.against_account like %(bank_cash_account)s" if self.bank_cash_account else "1=1"
 		)
+
+		limit = f"limit {self.payment_limit}" if self.payment_limit else " "
 
 		# nosemgrep
 		journal_entries = frappe.db.sql(
@@ -116,11 +169,13 @@ class PaymentReconciliation(Document):
 					ELSE {bank_account_condition}
 				END)
 			order by t1.posting_date
+			{limit}
 			""".format(
 				**{
 					"dr_or_cr": dr_or_cr,
 					"bank_account_condition": bank_account_condition,
 					"condition": condition,
+					"limit": limit,
 				}
 			),
 			{
@@ -146,7 +201,7 @@ class PaymentReconciliation(Document):
 		if self.payment_name:
 			conditions.append(doc.name.like(f"%{self.payment_name}%"))
 
-		self.return_invoices = (
+		self.return_invoices_query = (
 			qb.from_(doc)
 			.select(
 				ConstantColumn(voucher_type).as_("voucher_type"),
@@ -154,8 +209,11 @@ class PaymentReconciliation(Document):
 				doc.return_against,
 			)
 			.where(Criterion.all(conditions))
-			.run(as_dict=True)
 		)
+		if self.payment_limit:
+			self.return_invoices_query = self.return_invoices_query.limit(self.payment_limit)
+
+		self.return_invoices = self.return_invoices_query.run(as_dict=True)
 
 	def get_dr_or_cr_notes(self):
 
@@ -315,6 +373,7 @@ class PaymentReconciliation(Document):
 				res.difference_amount = self.get_difference_amount(pay, inv, res["allocated_amount"])
 				res.difference_account = default_exchange_gain_loss_account
 				res.exchange_rate = inv.get("exchange_rate")
+				res.update({"gain_loss_posting_date": pay.get("posting_date")})
 
 				if pay.get("amount") == 0:
 					entries.append(res)
@@ -421,6 +480,7 @@ class PaymentReconciliation(Document):
 				"allocated_amount": flt(row.get("allocated_amount")),
 				"difference_amount": flt(row.get("difference_amount")),
 				"difference_account": row.get("difference_account"),
+				"difference_posting_date": row.get("gain_loss_posting_date"),
 				"cost_center": row.get("cost_center"),
 			}
 		)
@@ -477,6 +537,27 @@ class PaymentReconciliation(Document):
 			)
 
 			invoice_exchange_map.update(purchase_invoice_map)
+
+		journals = [
+			d.get("invoice_number") for d in invoices if d.get("invoice_type") == "Journal Entry"
+		]
+		journals.extend(
+			[d.get("reference_name") for d in payments if d.get("reference_type") == "Journal Entry"]
+		)
+		if journals:
+			journals = list(set(journals))
+			journals_map = frappe._dict(
+				frappe.db.get_all(
+					"Journal Entry Account",
+					filters={"parent": ("in", journals), "account": ("in", [self.receivable_payable_account])},
+					fields=[
+						"parent as `name`",
+						"exchange_rate",
+					],
+					as_list=1,
+				)
+			)
+			invoice_exchange_map.update(journals_map)
 
 		return invoice_exchange_map
 

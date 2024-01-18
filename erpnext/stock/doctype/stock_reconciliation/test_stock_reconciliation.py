@@ -702,6 +702,7 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 		self.assertEqual(flt(sl_entry.actual_qty), 1.0)
 		self.assertEqual(flt(sl_entry.qty_after_transaction), 1.0)
 
+	@change_settings("Stock Reposting Settings", {"item_based_reposting": 0})
 	def test_backdated_stock_reco_entry(self):
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 
@@ -955,6 +956,104 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 		)
 
 		self.assertRaises(frappe.ValidationError, sr.save)
+
+	@change_settings("Stock Settings", {"allow_negative_stock": 0})
+	def test_backdated_stock_reco_for_batch_item_dont_have_future_sle(self):
+		# Step - 1: Create a Batch Item
+		from erpnext.stock.doctype.item.test_item import make_item
+
+		item = make_item(
+			properties={
+				"is_stock_item": 1,
+				"has_batch_no": 1,
+				"create_new_batch": 1,
+				"batch_number_series": "TEST-BATCH-.###",
+			}
+		).name
+
+		# Step - 2: Create Opening Stock Reconciliation
+		sr1 = create_stock_reconciliation(
+			item_code=item,
+			warehouse="_Test Warehouse - _TC",
+			qty=10,
+			purpose="Opening Stock",
+			posting_date=add_days(nowdate(), -2),
+		)
+
+		# Step - 3: Create Stock Entry (Material Receipt)
+		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+
+		se1 = make_stock_entry(
+			item_code=item,
+			target="_Test Warehouse - _TC",
+			qty=100,
+		)
+
+		# Step - 4: Create Stock Entry (Material Issue)
+		make_stock_entry(
+			item_code=item,
+			source="_Test Warehouse - _TC",
+			qty=100,
+			batch_no=se1.items[0].batch_no,
+			purpose="Material Issue",
+		)
+
+		# Step - 5: Create Stock Reconciliation (Backdated) after the Stock Reconciliation 1 (Step - 2)
+		sr2 = create_stock_reconciliation(
+			item_code=item,
+			warehouse="_Test Warehouse - _TC",
+			qty=5,
+			batch_no=sr1.items[0].batch_no,
+			posting_date=add_days(nowdate(), -1),
+		)
+
+		self.assertEqual(sr2.docstatus, 1)
+
+	def test_current_qty_and_current_serial_no_count(self):
+		# Step - 1: Create a Serial Batch Item
+		item = self.make_item(
+			properties={
+				"is_stock_item": 1,
+				"has_serial_no": 1,
+				"serial_no_series": "TEST-SERIAL-.###",
+				"has_batch_no": 1,
+				"create_new_batch": 1,
+				"batch_number_series": "TEST-BATCH-.###",
+			}
+		).name
+
+		# Step - 2: Inward stock in multiple Batches
+		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+
+		se1 = make_stock_entry(
+			item_code=item,
+			target="_Test Warehouse - _TC",
+			qty=10,
+		)
+		se2 = make_stock_entry(
+			item_code=item,
+			target="_Test Warehouse - _TC",
+			qty=5,
+		)
+
+		# Step - 3: Create Stock Reconciliation
+		sr = create_stock_reconciliation(
+			item_code=item,
+			warehouse="_Test Warehouse - _TC",
+			qty=0,
+			batch_no=se1.items[0].batch_no,
+			do_not_submit=True,
+		)
+
+		# Test - 1: Current Serial No Count should be equal to Current Qty
+		self.assertEqual(sr.items[0].current_qty, se1.items[0].qty)
+		self.assertEqual(len(sr.items[0].current_serial_no.split("\n")), sr.items[0].current_qty)
+
+		sr.items[0].batch_no = se2.items[0].batch_no
+		sr.save()
+
+		self.assertEqual(sr.items[0].current_qty, se2.items[0].qty)
+		self.assertEqual(len(sr.items[0].current_serial_no.split("\n")), sr.items[0].current_qty)
 
 
 def create_batch_item_with_batch(item_name, batch_id):

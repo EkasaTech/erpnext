@@ -43,10 +43,12 @@ class Asset(AccountsController):
 		self.validate_finance_books()
 		if not self.split_from:
 			self.prepare_depreciation_data()
+			self.update_shift_depr_schedule()
 		self.validate_gross_and_purchase_amount()
 		if self.get("schedules"):
 			self.validate_expected_value_after_useful_life()
 
+		self.total_asset_cost = self.gross_purchase_amount
 		self.status = self.get_status()
 
 	def on_submit(self):
@@ -103,6 +105,13 @@ class Asset(AccountsController):
 				self.value_after_depreciation = flt(self.gross_purchase_amount) - flt(
 					self.opening_accumulated_depreciation
 				)
+
+	def update_shift_depr_schedule(self):
+		if not any(fb.get("shift_based") for fb in self.finance_books) or self.docstatus != 0:
+			return
+
+		self.make_depreciation_schedule()
+		self.set_accumulated_depreciation()
 
 	def should_prepare_depreciation_schedule(self):
 		if not self.get("schedules"):
@@ -238,7 +247,12 @@ class Asset(AccountsController):
 			frappe.throw(_("Gross Purchase Amount is mandatory"), frappe.MandatoryError)
 
 		if is_cwip_accounting_enabled(self.asset_category):
-			if not self.is_existing_asset and not (self.purchase_receipt or self.purchase_invoice):
+			if (
+				not self.is_existing_asset
+				and not self.is_composite_asset
+				and not self.purchase_receipt
+				and not self.purchase_invoice
+			):
 				frappe.throw(
 					_("Please create purchase receipt or purchase invoice for the item {0}").format(
 						self.item_code
@@ -251,7 +265,7 @@ class Asset(AccountsController):
 				and not frappe.db.get_value("Purchase Invoice", self.purchase_invoice, "update_stock")
 			):
 				frappe.throw(
-					_("Update stock must be enable for the purchase invoice {0}").format(self.purchase_invoice)
+					_("Update stock must be enabled for the purchase invoice {0}").format(self.purchase_invoice)
 				)
 
 		if not self.calculate_depreciation:
@@ -318,7 +332,7 @@ class Asset(AccountsController):
 				self.get_depreciation_rate(d, on_validate=True), d.precision("rate_of_depreciation")
 			)
 
-	def make_depreciation_schedule(self, date_of_disposal, value_after_depreciation=None):
+	def make_depreciation_schedule(self, date_of_disposal=None, value_after_depreciation=None):
 		if not self.get("schedules"):
 			self.schedules = []
 
@@ -410,13 +424,7 @@ class Asset(AccountsController):
 				)
 
 				if depreciation_amount > 0:
-					self._add_depreciation_row(
-						date_of_disposal,
-						depreciation_amount,
-						finance_book.depreciation_method,
-						finance_book.finance_book,
-						finance_book.idx,
-					)
+					self._add_depreciation_row(date_of_disposal, depreciation_amount, finance_book, n)
 
 				break
 
@@ -425,6 +433,7 @@ class Asset(AccountsController):
 				n == 0
 				and (has_pro_rata or has_wdv_or_dd_non_yearly_pro_rata)
 				and not self.opening_accumulated_depreciation
+				and not self.flags.wdv_it_act_applied
 			):
 				from_date = add_days(
 					self.available_for_use_date, -1
@@ -498,25 +507,27 @@ class Asset(AccountsController):
 				skip_row = True
 
 			if flt(depreciation_amount, self.precision("gross_purchase_amount")) > 0:
-				self._add_depreciation_row(
-					schedule_date,
-					depreciation_amount,
-					finance_book.depreciation_method,
-					finance_book.finance_book,
-					finance_book.idx,
-				)
+				self._add_depreciation_row(schedule_date, depreciation_amount, finance_book, n)
 
-	def _add_depreciation_row(
-		self, schedule_date, depreciation_amount, depreciation_method, finance_book, finance_book_id
-	):
+	def _add_depreciation_row(self, schedule_date, depreciation_amount, finance_book, schedule_idx):
+		if finance_book.shift_based:
+			shift = (
+				self.schedules_before_clearing[schedule_idx].shift
+				if self.schedules_before_clearing and len(self.schedules_before_clearing) > schedule_idx
+				else frappe.get_cached_value("Asset Shift Factor", {"default": 1}, "shift_name")
+			)
+		else:
+			shift = None
+
 		self.append(
 			"schedules",
 			{
 				"schedule_date": schedule_date,
 				"depreciation_amount": depreciation_amount,
-				"depreciation_method": depreciation_method,
-				"finance_book": finance_book,
-				"finance_book_id": finance_book_id,
+				"depreciation_method": finance_book.depreciation_method,
+				"finance_book": finance_book.finance_book,
+				"finance_book_id": finance_book.idx,
+				"shift": shift,
 			},
 		)
 
@@ -544,6 +555,8 @@ class Asset(AccountsController):
 		start = []
 		num_of_depreciations_completed = 0
 		depr_schedule = []
+
+		self.schedules_before_clearing = self.get("schedules")
 
 		for schedule in self.get("schedules"):
 			# to update start when there are JEs linked with all the schedule rows corresponding to an FB
@@ -752,10 +765,12 @@ class Asset(AccountsController):
 				and not date_of_return
 			):
 				book = self.get("finance_books")[cint(d.finance_book_id) - 1]
-				depreciation_amount += flt(
-					value_after_depreciation - flt(book.expected_value_after_useful_life),
-					d.precision("depreciation_amount"),
-				)
+
+				if not book.shift_based:
+					depreciation_amount += flt(
+						value_after_depreciation - flt(book.expected_value_after_useful_life),
+						d.precision("depreciation_amount"),
+					)
 
 			d.depreciation_amount = depreciation_amount
 			accumulated_depreciation += d.depreciation_amount
@@ -1216,11 +1231,13 @@ def get_item_details(item_code, asset_category, gross_purchase_amount):
 				"depreciation_method": d.depreciation_method,
 				"total_number_of_depreciations": d.total_number_of_depreciations,
 				"frequency_of_depreciation": d.frequency_of_depreciation,
-				"daily_depreciation": d.daily_depreciation,
+				"daily_prorata_based": d.daily_prorata_based,
+				"shift_based": d.shift_based,
 				"salvage_value_percentage": d.salvage_value_percentage,
 				"expected_value_after_useful_life": flt(gross_purchase_amount)
 				* flt(d.salvage_value_percentage / 100),
 				"depreciation_start_date": d.depreciation_start_date or nowdate(),
+				"rate_of_depreciation": d.rate_of_depreciation,
 			}
 		)
 
@@ -1363,27 +1380,22 @@ def get_depreciation_amount(
 			asset, fb_row, schedule_idx, number_of_pending_depreciations
 		)
 	else:
-		rate_of_depreciation = get_updated_rate_of_depreciation_for_wdv_and_dd(
-			asset, depreciable_value, fb_row
-		)
 		return get_wdv_or_dd_depr_amount(
+			asset,
+			fb_row,
 			depreciable_value,
-			rate_of_depreciation,
-			fb_row.frequency_of_depreciation,
 			schedule_idx,
 			prev_depreciation_amount,
 			has_wdv_or_dd_non_yearly_pro_rata,
 		)
 
 
-@erpnext.allow_regional
-def get_updated_rate_of_depreciation_for_wdv_and_dd(asset, depreciable_value, fb_row):
-	return fb_row.rate_of_depreciation
-
-
 def get_straight_line_or_manual_depr_amount(
 	asset, row, schedule_idx, number_of_pending_depreciations
 ):
+	if row.shift_based:
+		return get_shift_depr_amount(asset, row, schedule_idx)
+
 	# if the Depreciation Schedule is being modified after Asset Repair due to increase in asset life and value
 	if asset.flags.increase_in_asset_life:
 		return (flt(row.value_after_depreciation) - flt(row.expected_value_after_useful_life)) / (
@@ -1396,7 +1408,7 @@ def get_straight_line_or_manual_depr_amount(
 		)
 	# if the Depreciation Schedule is being modified after Asset Value Adjustment due to decrease in asset value
 	elif asset.flags.decrease_in_asset_value_due_to_value_adjustment:
-		if row.daily_depreciation:
+		if row.daily_prorata_based:
 			daily_depr_amount = (
 				flt(row.value_after_depreciation) - flt(row.expected_value_after_useful_life)
 			) / date_diff(
@@ -1441,7 +1453,7 @@ def get_straight_line_or_manual_depr_amount(
 			) / number_of_pending_depreciations
 	# if the Depreciation Schedule is being prepared for the first time
 	else:
-		if row.daily_depreciation:
+		if row.daily_prorata_based:
 			daily_depr_amount = (
 				flt(asset.gross_purchase_amount)
 				- flt(asset.opening_accumulated_depreciation)
@@ -1478,30 +1490,87 @@ def get_straight_line_or_manual_depr_amount(
 			) / flt(row.total_number_of_depreciations - asset.number_of_depreciations_booked)
 
 
+def get_shift_depr_amount(asset, row, schedule_idx):
+	if asset.get("__islocal") and not asset.flags.shift_allocation:
+		return (
+			flt(asset.gross_purchase_amount)
+			- flt(asset.opening_accumulated_depreciation)
+			- flt(row.expected_value_after_useful_life)
+		) / flt(row.total_number_of_depreciations - asset.number_of_depreciations_booked)
+
+	asset_shift_factors_map = get_asset_shift_factors_map()
+	shift = (
+		asset.schedules_before_clearing[schedule_idx].shift
+		if len(asset.schedules_before_clearing) > schedule_idx
+		else None
+	)
+	shift_factor = asset_shift_factors_map.get(shift) if shift else 0
+
+	shift_factors_sum = sum(
+		flt(asset_shift_factors_map.get(schedule.shift)) for schedule in asset.schedules_before_clearing
+	)
+
+	return (
+		(
+			flt(asset.gross_purchase_amount)
+			- flt(asset.opening_accumulated_depreciation)
+			- flt(row.expected_value_after_useful_life)
+		)
+		/ flt(shift_factors_sum)
+	) * shift_factor
+
+
+def get_asset_shift_factors_map():
+	return dict(frappe.db.get_all("Asset Shift Factor", ["shift_name", "shift_factor"], as_list=True))
+
+
+@erpnext.allow_regional
 def get_wdv_or_dd_depr_amount(
+	asset,
+	fb_row,
 	depreciable_value,
-	rate_of_depreciation,
-	frequency_of_depreciation,
 	schedule_idx,
 	prev_depreciation_amount,
 	has_wdv_or_dd_non_yearly_pro_rata,
 ):
-	if cint(frequency_of_depreciation) == 12:
-		return flt(depreciable_value) * (flt(rate_of_depreciation) / 100)
+	return get_default_wdv_or_dd_depr_amount(
+		asset,
+		fb_row,
+		depreciable_value,
+		schedule_idx,
+		prev_depreciation_amount,
+		has_wdv_or_dd_non_yearly_pro_rata,
+	)
+
+
+def get_default_wdv_or_dd_depr_amount(
+	asset,
+	fb_row,
+	depreciable_value,
+	schedule_idx,
+	prev_depreciation_amount,
+	has_wdv_or_dd_non_yearly_pro_rata,
+):
+	if cint(fb_row.frequency_of_depreciation) == 12:
+		return flt(depreciable_value) * (flt(fb_row.rate_of_depreciation) / 100)
 	else:
 		if has_wdv_or_dd_non_yearly_pro_rata:
 			if schedule_idx == 0:
-				return flt(depreciable_value) * (flt(rate_of_depreciation) / 100)
-			elif schedule_idx % (12 / cint(frequency_of_depreciation)) == 1:
+				return flt(depreciable_value) * (flt(fb_row.rate_of_depreciation) / 100)
+			elif schedule_idx % (12 / cint(fb_row.frequency_of_depreciation)) == 1:
 				return (
-					flt(depreciable_value) * flt(frequency_of_depreciation) * (flt(rate_of_depreciation) / 1200)
+					flt(depreciable_value)
+					* flt(fb_row.frequency_of_depreciation)
+					* (flt(fb_row.rate_of_depreciation) / 1200)
 				)
 			else:
 				return prev_depreciation_amount
 		else:
-			if schedule_idx % (12 / cint(frequency_of_depreciation)) == 0:
+			if schedule_idx % (12 / cint(fb_row.frequency_of_depreciation)) == 0:
 				return (
-					flt(depreciable_value) * flt(frequency_of_depreciation) * (flt(rate_of_depreciation) / 1200)
+					flt(depreciable_value)
+					* flt(fb_row.frequency_of_depreciation)
+					* (flt(fb_row.rate_of_depreciation) / 1200)
 				)
 			else:
 				return prev_depreciation_amount

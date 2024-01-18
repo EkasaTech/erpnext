@@ -144,6 +144,7 @@ class DeliveryNote(SellingController):
 
 		from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
 
+		self.set_product_bundle_reference_in_packed_items()  # should be called before `make_packing_list`
 		make_packing_list(self)
 
 		if self._action != "submit" and not self.is_return:
@@ -411,7 +412,7 @@ class DeliveryNote(SellingController):
 		items_list = [item.item_code for item in self.items]
 		return frappe.db.get_all(
 			"Product Bundle",
-			filters={"new_item_code": ["in", items_list]},
+			filters={"new_item_code": ["in", items_list], "disabled": 0},
 			pluck="name",
 		)
 
@@ -429,6 +430,17 @@ class DeliveryNote(SellingController):
 					)
 				else:
 					serial_nos.append(serial_no)
+
+	def set_product_bundle_reference_in_packed_items(self):
+		if self.packed_items and ((self.is_return and self.return_against) or self.amended_from):
+			if items_ref_map := {
+				item.dn_detail or item.get("_amended_from"): item.name
+				for item in self.items
+				if item.dn_detail or item.get("_amended_from")
+			}:
+				for item in self.packed_items:
+					if item.parent_detail_docname in items_ref_map:
+						item.parent_detail_docname = items_ref_map[item.parent_detail_docname]
 
 
 def update_billed_amount_based_on_so(so_detail, update_modified=True):
@@ -653,8 +665,6 @@ def make_sales_invoice(source_name, target_doc=None):
 	if automatically_fetch_payment_terms:
 		doc.set_payment_schedule()
 
-	doc.set_onload("ignore_price_list", True)
-
 	return doc
 
 
@@ -749,7 +759,7 @@ def make_packing_slip(source_name, target_doc=None):
 				},
 				"postprocess": update_item,
 				"condition": lambda item: (
-					not frappe.db.exists("Product Bundle", {"new_item_code": item.item_code})
+					not frappe.db.exists("Product Bundle", {"new_item_code": item.item_code, "disabled": 0})
 					and flt(item.packed_qty) < flt(item.qty)
 				),
 			},
@@ -987,7 +997,3 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 	)
 
 	return doclist
-
-
-def on_doctype_update():
-	frappe.db.add_index("Delivery Note", ["customer", "is_return", "return_against"])
