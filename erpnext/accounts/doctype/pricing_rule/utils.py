@@ -6,7 +6,7 @@
 
 import copy
 import json
-
+import math
 import frappe
 from frappe import _, bold
 from frappe.utils import cint, flt, fmt_money, get_link_to_form, getdate, today
@@ -649,7 +649,7 @@ def get_product_discount_rule(pricing_rule, item_details, args=None, doc=None):
 		if transaction_qty:
 			qty = flt(transaction_qty) * qty / pricing_rule.recurse_for
 			if pricing_rule.round_free_qty:
-				qty = round(qty)
+				qty = math.trunc(qty)
 
 	free_item_data_args = {
 		"item_code": free_item,
