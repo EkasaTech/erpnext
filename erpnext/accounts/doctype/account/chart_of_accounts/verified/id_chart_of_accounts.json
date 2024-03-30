@@ -17,8 +17,11 @@
                         "is_group": 1
                     }, 
                     "Bank Rupiah": {
-                        "account_number": "1121.000", 
-                        "is_group": 1
+                        "Bank Rupiah":{
+                            "account_number": "1121.001", 
+                            "account_type": "Bank"
+                        },
+                        "account_number": "1121.000"
                     }, 
                     "account_number": "1120.000", 
                     "account_type": "Bank"
@@ -121,8 +124,10 @@
                 "Investasi": {
                     "Investasi": {
                         "Deposito": {
-                            "account_number": "1231.300", 
-                            "is_group": 1
+                            "Deposito": {
+                                "account_number": "1231.301"
+                            }, 
+                            "account_number": "1231.300"
                         }, 
                         "Investasi Saham": {
                             "Investasi Saham": {
@@ -179,8 +184,38 @@
                     "Selisih Pembayaran Customer": {
                         "account_number": "5510.009", 
                         "account_type": "Round Off"
+                    },  
+                    "Beban Pembayaran Royalti": {
+                        "account_number": "5510.011"
+                    }, 
+                    "Beban Bunga Bank": {
+                        "account_number": "5510.012"
+                    }, 
+                    "Beban Kontribusi Sosial": {
+                        "account_number": "5510.013"
+                    },
+                    "Beban Lain lain": {
+                        "account_number": "5510.014"
                     }, 
                     "account_number": "5510.000"
+                }, 
+                "Beban Berlangganan Pihak Ketiga": {
+                    "Beban Zoom": {
+                        "account_number": "5520.001"
+                    }, 
+                    "Beban Google Drive": {
+                        "account_number": "5520.002"
+                    }, 
+                    "Beban OneDrive": {
+                        "account_number": "5520.003"
+                    }, 
+                    "Beban Dropbox": {
+                        "account_number": "5520.004"
+                    }, 
+                    "Beban Berlangganan Pihak Lain-Lain": {
+                        "account_number": "5520.005"
+                    },
+                    "account_number": "5520.000"
                 }, 
                 "account_number": "5500.000"
             }, 
@@ -249,6 +284,18 @@
                     }, 
                     "Potongan Supplier": {
                         "account_number": "5110.018"
+                    },
+                    "Biaya Cetak Marketing": {
+                        "account_number": "5110.022"
+                    },
+                    "Biaya Event Marketing": {
+                        "account_number": "5110.023"
+                    }, 
+                    "Komisi Marketing": {
+                        "account_number": "5110.024"
+                    },  
+                    "Biaya Training": {
+                        "account_number": "5110.025"
                     }, 
                     "account_number": "5110.000"
                 }, 
@@ -327,9 +374,18 @@
                     }, 
                     "Biaya TLP Gudang & Kantor": {
                         "account_number": "5130.003"
+                    },
+                    "Biaya Internet Gudang dan Kantor": {
+                        "account_number": "5130.019"
                     }, 
-                    "Iuran Bulanan": {
+                    "Biaya Rumah Tangga": {
+                        "account_number": "5130.020"
+                    }, 
+                    "Iuran Bulanan Kebersihan dan Keamanan": {
                         "account_number": "5130.011"
+                    }, 
+                    "Biaya Pulsa": {
+                        "account_number": "5130.021"
                     }, 
                     "account_number": "5130.000"
                 }, 
