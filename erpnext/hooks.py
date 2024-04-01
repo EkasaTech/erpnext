@@ -16,7 +16,7 @@ app_include_js = "erpnext.bundle.js"
 app_include_css = "erpnext.bundle.css"
 web_include_js = "erpnext-web.bundle.js"
 web_include_css = "erpnext-web.bundle.css"
-email_css = "email_erpnext.bundle.css"
+email_css = "erpnext_email.bundle.scss"
 
 doctype_js = {
 	"Address": "public/js/address.js",
@@ -299,7 +299,10 @@ period_closing_doctypes = [
 
 doc_events = {
 	"*": {
-		"validate": "erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
+		"validate": [
+			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
+			"erpnext.setup.doctype.transaction_deletion_record.transaction_deletion_record.check_for_running_deletion_job",
+		],
 	},
 	tuple(period_closing_doctypes): {
 		"validate": "erpnext.accounts.doctype.accounting_period.accounting_period.validate_accounting_period_on_doc_save",
@@ -548,6 +551,8 @@ accounting_dimension_doctypes = [
 	"Account Closing Balance",
 	"Supplier Quotation",
 	"Supplier Quotation Item",
+	"Payment Reconciliation",
+	"Payment Reconciliation Allocation",
 ]
 
 # get matching queries for Bank Reconciliation
