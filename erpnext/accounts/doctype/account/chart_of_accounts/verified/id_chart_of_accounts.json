@@ -702,6 +702,10 @@
                 "Pendapatan Bunga Bank": {
                     "account_number": "4410.000"
                 }, 
+                "Pendapatan Service Charge": {
+                    "account_number": "4411.000",
+                    "account_type": "Chargeable"
+                }, 
                 "Pendapatan Bunga Dari Pihak Ke 3": {
                     "account_number": "4420.000"
                 }, 
