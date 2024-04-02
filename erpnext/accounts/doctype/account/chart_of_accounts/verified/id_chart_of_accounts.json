@@ -70,7 +70,11 @@
                     "account_number": "1160.000"
                 }, 
                 "Persediaan Barang": {
-                    "Persediaan Barang": {
+                    "Persediaan Barang": {                        
+                        "Persediaan Barang": {
+                            "account_number": "1141.001",
+                            "account_type": "Stock"
+                        }, 
                         "account_number": "1141.000", 
                         "account_type": "Stock", 
                         "is_group": 1
