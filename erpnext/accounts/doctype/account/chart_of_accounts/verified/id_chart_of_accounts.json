@@ -602,6 +602,9 @@
                             "account_number": "2111.002", 
                             "account_type": "Payable"
                         }, 
+                        "Hutang Gaji": {
+                            "account_number": "2111.005"
+                        }, 
                         "account_number": "2111.000"
                     }, 
                     "Stock Diterima Tapi Tidak Ditagih": {
