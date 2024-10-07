@@ -1,6 +1,18 @@
 [
 	{
 		"uom_name": "Unit",
-		"must_be_whole_number": 1
+		"must_be_whole_number": 0
+	},
+	{
+		"uom_name": "Kg",
+		"must_be_whole_number": 0
+	},
+	{
+		"uom_name": "Gram",
+		"must_be_whole_number": 0
+	},
+	{
+		"uom_name": "Liter",
+		"must_be_whole_number": 0
 	}
 ]

@@ -1,2 +1,16 @@
 [
+	{
+		"category": "Mass",
+		"from_uom": "Kg",
+		"to_uom": "Gram",
+		"abbr": "g",
+		"value": "1000"
+	},
+	{
+		"category": "Mass",
+		"from_uom": "Kg",
+		"to_uom": "Kg",
+		"abbr": "kg",
+		"value": "1"
+	}
 ]
