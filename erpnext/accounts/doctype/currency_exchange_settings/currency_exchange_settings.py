@@ -87,7 +87,7 @@ def get_api_endpoint(service_provider: str = None, use_http: bool = False):
 		if service_provider == "exchangerate.host":
 			api = "api.exchangerate.host/convert"
 		elif service_provider == "frankfurter.app":
-			api = "frankfurter.app/{transaction_date}"
+			api = "api.frankfurter.dev/v1/latest"
 
 		protocol = "https://"
 		if use_http:
