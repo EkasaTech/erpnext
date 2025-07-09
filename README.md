@@ -87,3 +87,7 @@ By contributing to ERPNext, you agree that your contributions will be licensed u
 ## Logo and Trademark Policy
 
 Please read our [Logo and Trademark Policy](TRADEMARK_POLICY.md).
+
+## Release Note Ekasa
+15.57.5-1
+- Add item_group in get api/method/erpnext.selling.page.point_of_sale.point_of_sale.get_items
