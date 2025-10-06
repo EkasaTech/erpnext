@@ -89,5 +89,8 @@ By contributing to ERPNext, you agree that your contributions will be licensed u
 Please read our [Logo and Trademark Policy](TRADEMARK_POLICY.md).
 
 ## Release Note Ekasa
-15.57.5-1
+15.57.5-Ekasa-1
 - Add item_group in get api/method/erpnext.selling.page.point_of_sale.point_of_sale.get_items
+
+15.57.5-Ekasa-2
+- Modify erpnext/accounts/doctype/pos_invoice_merge_log.py to handle "On Previous Row Total" sales charges and taxes
