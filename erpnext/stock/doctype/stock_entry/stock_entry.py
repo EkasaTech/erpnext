@@ -1398,6 +1398,9 @@ class StockEntry(StockController):
 						"incoming_rate": 0,
 					},
 				)
+				# 👉 Add the remark from parent document
+				sle.parent_remark = self.remarks or ""
+
 				if cstr(d.t_warehouse):
 					sle.dependant_sle_voucher_detail_no = d.name
 				elif finished_item_row and (
@@ -1456,6 +1459,8 @@ class StockEntry(StockController):
 						"incoming_rate": flt(d.valuation_rate),
 					},
 				)
+				# 👉 Add the remark from parent document
+				sle.parent_remark = self.remarks or ""
 
 				if cstr(d.s_warehouse) or (finished_item_row and d.name == finished_item_row.name):
 					sle.recalculate_rate = 1

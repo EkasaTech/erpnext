@@ -92,6 +92,7 @@ def make_sl_entries(sl_entries, allow_negative_stock=False, via_landed_cost_vouc
 						sle.item_code, sle.voucher_type, sle.voucher_no, sle.voucher_detail_no
 					)
 					sle["outgoing_rate"] = 0.0
+			sle["custom_parent_remark"] = sle.get("parent_remark")
 
 			if sle.get("actual_qty") or sle.get("voucher_type") == "Stock Reconciliation":
 				sle_doc = make_entry(sle, allow_negative_stock, via_landed_cost_voucher)
