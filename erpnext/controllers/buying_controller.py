@@ -909,7 +909,7 @@ class BuyingController(SubcontractingController):
 		asset.flags.ignore_validate = True
 		asset.flags.ignore_mandatory = True
 		asset.set_missing_values()
-		asset.db_insert()
+		asset.insert()
 
 		return asset.name
 
