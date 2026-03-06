@@ -1568,21 +1568,29 @@ class PaymentEntry(AccountsController):
 				)
 			)
 		if self.payment_type in ("Receive", "Internal Transfer"):
+			account_type = frappe.db.get_value("Account", self.paid_to, "account_type")
+
+			gl_dict = {
+				"account": self.paid_to,
+				"account_currency": self.paid_to_account_currency,
+				"against": self.party if self.payment_type == "Receive" else self.paid_from,
+				"debit_in_account_currency": self.received_amount,
+				"debit_in_transaction_currency": self.received_amount
+				if self.paid_to_account_currency == self.transaction_currency
+				else self.base_received_amount / self.transaction_exchange_rate,
+				"debit": self.base_received_amount,
+				"cost_center": self.cost_center,
+			}
+
+			# jika account receivable tambahkan party
+			if account_type == "Receivable":
+				gl_dict.update({
+					"party_type": self.party_type,
+					"party": self.party
+				})
+
 			gl_entries.append(
-				self.get_gl_dict(
-					{
-						"account": self.paid_to,
-						"account_currency": self.paid_to_account_currency,
-						"against": self.party if self.payment_type == "Receive" else self.paid_from,
-						"debit_in_account_currency": self.received_amount,
-						"debit_in_transaction_currency": self.received_amount
-						if self.paid_to_account_currency == self.transaction_currency
-						else self.base_received_amount / self.transaction_exchange_rate,
-						"debit": self.base_received_amount,
-						"cost_center": self.cost_center,
-					},
-					item=self,
-				)
+				self.get_gl_dict(gl_dict, item=self)
 			)
 
 	def add_tax_gl_entries(self, gl_entries):
