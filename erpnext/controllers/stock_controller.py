@@ -564,13 +564,14 @@ class StockController(AccountsController):
 				for sle in sle_list:
 					if warehouse_account.get(sle.warehouse):
 						# from warehouse account
-						item_doc = frappe.get_cached_doc("Item", item_row.item_code)
-
 						inventory_account = ""
-						for d in item_doc.item_defaults:
-							if d.company == self.company and d.custom_default_inventory_account:
-								inventory_account = d.custom_default_inventory_account
-								break
+						if item_row.item_code:
+							item_doc = frappe.get_cached_doc("Item", item_row.item_code)							
+							if item_doc:
+								for d in item_doc.item_defaults:
+									if d.company == self.company and d.custom_default_inventory_account:
+										inventory_account = d.custom_default_inventory_account
+										break
 
 						if inventory_account:
 							asset_account = inventory_account
@@ -580,7 +581,6 @@ class StockController(AccountsController):
 						else:
 							asset_account = warehouse_account[sle.warehouse]["account"]
 							account_currency = warehouse_account[sle.warehouse]["account_currency"]
-
 						sle_rounding_diff += flt(sle.stock_value_difference)
 
 						self.check_expense_account(item_row)
