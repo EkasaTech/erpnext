@@ -564,6 +564,22 @@ class StockController(AccountsController):
 				for sle in sle_list:
 					if warehouse_account.get(sle.warehouse):
 						# from warehouse account
+						item_doc = frappe.get_cached_doc("Item", item_row.item_code)
+
+						inventory_account = ""
+						for d in item_doc.item_defaults:
+							if d.company == self.company and d.custom_default_inventory_account:
+								inventory_account = d.custom_default_inventory_account
+								break
+
+						if inventory_account:
+							asset_account = inventory_account
+							account_currency = frappe.get_cached_value(
+								"Account", inventory_account, "account_currency"
+							)
+						else:
+							asset_account = warehouse_account[sle.warehouse]["account"]
+							account_currency = warehouse_account[sle.warehouse]["account_currency"]
 
 						sle_rounding_diff += flt(sle.stock_value_difference)
 
@@ -579,7 +595,7 @@ class StockController(AccountsController):
 						gl_list.append(
 							self.get_gl_dict(
 								{
-									"account": warehouse_account[sle.warehouse]["account"],
+									"account": asset_account,
 									"against": expense_account,
 									"cost_center": item_row.cost_center,
 									"project": sle.get("project") or item_row.project or self.get("project"),
@@ -598,7 +614,7 @@ class StockController(AccountsController):
 							self.get_gl_dict(
 								{
 									"account": expense_account,
-									"against": warehouse_account[sle.warehouse]["account"],
+									"against": asset_account,
 									"cost_center": item_row.cost_center,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": -1 * flt(sle.stock_value_difference, precision),
