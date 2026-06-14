@@ -87,3 +87,8 @@ By contributing to ERPNext, you agree that your contributions will be licensed u
 ## Logo and Trademark Policy
 
 Please read our [Logo and Trademark Policy](TRADEMARK_POLICY.md).
+
+## Ekasa Version
+
+15.95.103
+- Update Purchase Receipt logic for inventory account using default account from item master

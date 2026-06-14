@@ -493,8 +493,19 @@ class PurchaseReceipt(BuyingController):
 			)
 
 		def make_stock_received_but_not_billed_entry(item):
+			inventory_account = ""
+			if item.from_warehouse and item.item_code:
+				item_doc = frappe.get_cached_doc("Item", item.item_code)
+				if item_doc:
+					for default in item_doc.item_defaults:
+						if default.company == self.company and default.custom_default_inventory_account:
+							inventory_account = default.custom_default_inventory_account
+							break
+
 			account = (
-				warehouse_account[item.from_warehouse]["account"] if item.from_warehouse else stock_asset_rbnb
+				inventory_account
+				if inventory_account
+				else (warehouse_account[item.from_warehouse]["account"] if item.from_warehouse else stock_asset_rbnb)
 			)
 			account_currency = get_account_currency(account)
 
@@ -727,7 +738,18 @@ class PurchaseReceipt(BuyingController):
 					)
 				elif warehouse_account.get(d.warehouse):
 					stock_value_diff = get_stock_value_difference(self.name, d.name, d.warehouse)
-					stock_asset_account_name = warehouse_account[d.warehouse]["account"]
+					inventory_account = ""
+					if d.item_code:
+						item_doc = frappe.get_cached_doc("Item", d.item_code)
+						if item_doc:
+							for default in item_doc.item_defaults:
+								if default.company == self.company and default.custom_default_inventory_account:
+									inventory_account = default.custom_default_inventory_account
+									break
+
+					stock_asset_account_name = (
+						inventory_account if inventory_account else warehouse_account[d.warehouse]["account"]
+					)
 					supplier_warehouse_account = warehouse_account.get(self.supplier_warehouse, {}).get(
 						"account"
 					)
@@ -772,7 +794,18 @@ class PurchaseReceipt(BuyingController):
 				)
 
 				stock_value_diff = get_stock_value_difference(self.name, d.name, d.rejected_warehouse)
-				stock_asset_account_name = warehouse_account[d.rejected_warehouse]["account"]
+				inventory_account = ""
+				if d.item_code:
+					item_doc = frappe.get_cached_doc("Item", d.item_code)
+					if item_doc:
+						for default in item_doc.item_defaults:
+							if default.company == self.company and default.custom_default_inventory_account:
+								inventory_account = default.custom_default_inventory_account
+								break
+
+				stock_asset_account_name = (
+					inventory_account if inventory_account else warehouse_account[d.rejected_warehouse]["account"]
+				)
 
 				make_item_asset_inward_gl_entry(d, stock_value_diff, stock_asset_account_name)
 				if not d.qty:
