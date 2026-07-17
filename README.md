@@ -92,3 +92,6 @@ Please read our [Logo and Trademark Policy](TRADEMARK_POLICY.md).
 
 15.95.103
 - Update Purchase Receipt logic for inventory account using default account from item master
+
+15.95.104
+- Update Stock Reconciliation logic for inventory account using default account from item master
