@@ -565,8 +565,9 @@ class StockController(AccountsController):
 					if warehouse_account.get(sle.warehouse):
 						# from warehouse account
 						inventory_account = ""
-						if item_row.item_code:
-							item_doc = frappe.get_cached_doc("Item", item_row.item_code)							
+						item_code = item_row.get("item_code") or sle.get("item_code")
+						if item_code:
+							item_doc = frappe.get_cached_doc("Item", item_code)							
 							if item_doc:
 								for d in item_doc.item_defaults:
 									if d.company == self.company and d.custom_default_inventory_account:
@@ -702,10 +703,13 @@ class StockController(AccountsController):
 			is_opening = "Yes" if reconciliation_purpose == "Opening Stock" else "No"
 			details = []
 			for voucher_detail_no in sle_map:
+				sle_list = sle_map.get(voucher_detail_no)
+				item_code = sle_list[0].item_code if sle_list else None
 				details.append(
 					frappe._dict(
 						{
 							"name": voucher_detail_no,
+							"item_code": item_code,
 							"expense_account": default_expense_account,
 							"cost_center": default_cost_center,
 							"is_opening": is_opening,
