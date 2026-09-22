@@ -573,6 +573,14 @@ class StockController(AccountsController):
 									if d.company == self.company and d.custom_default_inventory_account:
 										inventory_account = d.custom_default_inventory_account
 										break
+										
+								if not inventory_account and item_doc.item_group:
+									item_group_doc = frappe.get_cached_doc("Item Group", item_doc.item_group)
+									if item_group_doc and hasattr(item_group_doc, "item_group_defaults"):
+										for d in item_group_doc.item_group_defaults:
+											if d.company == self.company and d.custom_default_inventory_account:
+												inventory_account = d.custom_default_inventory_account
+												break
 
 						if inventory_account:
 							asset_account = inventory_account
