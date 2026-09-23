@@ -565,7 +565,7 @@ class StockController(AccountsController):
 					if warehouse_account.get(sle.warehouse):
 						# from warehouse account
 						inventory_account = ""
-						item_code = item_row.get("item_code") or sle.get("item_code")
+						item_code = sle.get("item_code") or item_row.get("item_code")
 						if item_code:
 							item_doc = frappe.get_cached_doc("Item", item_code)							
 							if item_doc:
@@ -597,7 +597,7 @@ class StockController(AccountsController):
 						# expense account/ target_warehouse / source_warehouse
 						if item_row.get("target_warehouse"):
 							warehouse = item_row.get("target_warehouse")
-							expense_account = warehouse_account[warehouse]["account"]
+							expense_account = item_row.get("expense_account") or inventory_account or warehouse_account[warehouse]["account"]
 						else:
 							expense_account = item_row.expense_account
 
