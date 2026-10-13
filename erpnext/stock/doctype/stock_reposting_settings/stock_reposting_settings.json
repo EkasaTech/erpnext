@@ -14,6 +14,7 @@
   "limits_dont_apply_on",
   "item_based_reposting",
   "errors_notification_section",
+  "send_error_notification_email",
   "notify_reposting_error_to_role"
  ],
  "fields": [
@@ -56,15 +57,22 @@
    "label": "Use Item based reposting"
   },
   {
+   "fieldname": "errors_notification_section",
+   "fieldtype": "Section Break",
+   "label": "Errors Notification"
+  },
+  {
+   "default": "0",
+   "fieldname": "send_error_notification_email",
+   "fieldtype": "Check",
+   "label": "Send Error Notification Email"
+  },
+  {
+   "depends_on": "send_error_notification_email",
    "fieldname": "notify_reposting_error_to_role",
    "fieldtype": "Link",
    "label": "Notify Reposting Error to Role",
    "options": "Role"
-  },
-  {
-   "fieldname": "errors_notification_section",
-   "fieldtype": "Section Break",
-   "label": "Errors Notification"
   }
  ],
  "index_web_pages_for_search": 1,

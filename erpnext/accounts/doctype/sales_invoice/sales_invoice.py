@@ -1736,12 +1736,13 @@ class SalesInvoice(SellingController):
 			and self.base_rounding_adjustment
 			and not self.is_internal_transfer()
 		):
+			use_company_roundoff_cost_center = self.get("use_company_roundoff_cost_center")
 			(
 				round_off_account,
 				round_off_cost_center,
 				round_off_for_opening,
 			) = get_round_off_account_and_cost_center(
-				self.company, "Sales Invoice", self.name, self.use_company_roundoff_cost_center
+				self.company, self.doctype, self.name, use_company_roundoff_cost_center
 			)
 
 			if self.is_opening == "Yes" and self.rounding_adjustment:
@@ -1774,7 +1775,7 @@ class SalesInvoice(SellingController):
 							self.base_rounding_adjustment, self.precision("base_rounding_adjustment")
 						),
 						"cost_center": round_off_cost_center
-						if self.use_company_roundoff_cost_center
+						if use_company_roundoff_cost_center
 						else (self.cost_center or round_off_cost_center),
 					},
 					item=self,

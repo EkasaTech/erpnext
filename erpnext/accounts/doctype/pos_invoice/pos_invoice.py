@@ -193,6 +193,19 @@ class POSInvoice(SalesInvoice):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+	@property
+	def use_company_roundoff_cost_center(self):
+		return self.get("use_company_roundoff_cost_center") or 0
+
+	@use_company_roundoff_cost_center.setter
+	def use_company_roundoff_cost_center(self, val):
+		self.set("use_company_roundoff_cost_center", val)
+
+	def get_gl_entries(self, warehouse_account=None):
+		# POS Invoices are sub-ledger documents that do not post individual GL entries.
+		# Their financial entries are consolidated via POS Closing Entry (Sales Invoice).
+		return []
+
 	def validate(self):
 		if not self.customer:
 			frappe.throw(_("Please select Customer first"))

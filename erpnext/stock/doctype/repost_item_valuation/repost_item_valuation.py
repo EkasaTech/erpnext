@@ -445,7 +445,12 @@ def _get_directly_dependent_vouchers(doc):
 
 
 def notify_error_to_stock_managers(doc, traceback):
+	if not cint(frappe.db.get_single_value("Stock Reposting Settings", "send_error_notification_email")):
+		return
+
 	recipients = get_recipients()
+	if not recipients:
+		return
 
 	subject = _("Error while reposting item valuation")
 	message = (
@@ -463,10 +468,9 @@ def notify_error_to_stock_managers(doc, traceback):
 
 
 def get_recipients():
-	role = (
-		frappe.db.get_single_value("Stock Reposting Settings", "notify_reposting_error_to_role")
-		or "Stock Manager"
-	)
+	role = frappe.db.get_single_value("Stock Reposting Settings", "notify_reposting_error_to_role")
+	if not role:
+		return []
 
 	recipients = get_users_with_role(role)
 

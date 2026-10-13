@@ -1618,12 +1618,13 @@ class AccountsController(TransactionBase):
 				d.exchange_gain_loss = difference
 
 	def make_precision_loss_gl_entry(self, gl_entries):
+		use_company_roundoff_cost_center = self.get("use_company_roundoff_cost_center")
 		(
 			round_off_account,
 			round_off_cost_center,
 			round_off_for_opening,
 		) = get_round_off_account_and_cost_center(
-			self.company, "Purchase Invoice", self.name, self.use_company_roundoff_cost_center
+			self.company, self.doctype, self.name, use_company_roundoff_cost_center
 		)
 
 		precision_loss = self.get("base_net_total") - flt(
@@ -1641,7 +1642,7 @@ class AccountsController(TransactionBase):
 						"against": against,
 						credit_or_debit: precision_loss,
 						"cost_center": round_off_cost_center
-						if self.use_company_roundoff_cost_center
+						if use_company_roundoff_cost_center
 						else self.cost_center or round_off_cost_center,
 						"remarks": _("Net total calculation precision loss"),
 					}
